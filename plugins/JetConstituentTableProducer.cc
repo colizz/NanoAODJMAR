@@ -96,6 +96,8 @@ void JetConstituentTableProducer<T>::produce(edm::Event &iEvent, const edm::Even
   // Secondary vertices
   std::vector<float> sv_mass, sv_pt, sv_ntracks, sv_chi2, sv_normchi2, sv_dxy, sv_dxysig, sv_d3d, sv_d3dsig, sv_costhetasvpv;
   std::vector<float> sv_ptrel, sv_phirel, sv_deltaR, sv_enratio;
+  std::vector<float> sv_trk_pt[5], sv_trk_eta[5], sv_trk_phi[5], sv_trk_mass[5], sv_trk_energy[5], sv_trk_pdgId[5];
+  std::vector<int> sv_trk_origIdx[5];
 
   auto jets = iEvent.getHandle(jet_token_);
   iEvent.getByToken(vtx_token_, vtxs_);
@@ -150,6 +152,33 @@ void JetConstituentTableProducer<T>::produce(edm::Event &iEvent, const edm::Even
         sv_phirel.push_back(reco::deltaPhi(*sv, jet));
         sv_deltaR.push_back(catch_infs_and_bound(std::fabs(reco::deltaR(*sv, jet_dir)) - 0.5, 0, -2, 0));
         sv_enratio.push_back(sv->energy() / jet.energy());
+        // Tracks from SV
+        std::vector<std::pair<int, reco::CandidatePtr>> trkVec;
+        int itrk = 0;
+        for (auto &trk : sv->daughterPtrVector())
+            trkVec.push_back(std::make_pair(itrk++, trk)); // make pair with index and candidate ptr
+        std::sort(trkVec.begin(), trkVec.end(), [](const auto &p1, const auto &p2) {return p1.second->pt() > p2.second->pt(); }); // order by candidate (track) pt
+        for (int itrk = 0; itrk < 5; ++itrk) {
+          if (itrk < static_cast <int>(trkVec.size())) {
+            auto trk = trkVec.at(itrk).second;
+            sv_trk_pt[itrk].push_back(trk->pt());
+            sv_trk_eta[itrk].push_back(trk->eta());
+            sv_trk_phi[itrk].push_back(trk->phi());
+            sv_trk_mass[itrk].push_back(trk->mass());
+            sv_trk_energy[itrk].push_back(trk->energy());
+            sv_trk_pdgId[itrk].push_back(trk->pdgId());
+            sv_trk_origIdx[itrk].push_back(trkVec.at(itrk).first);
+          }
+          else {
+            sv_trk_pt[itrk].push_back(0);
+            sv_trk_eta[itrk].push_back(0);
+            sv_trk_phi[itrk].push_back(0);
+            sv_trk_mass[itrk].push_back(0);
+            sv_trk_energy[itrk].push_back(0);
+            sv_trk_pdgId[itrk].push_back(0);
+            sv_trk_origIdx[itrk].push_back(-1);
+          }
+        }
       }
     }
 
@@ -225,6 +254,16 @@ void JetConstituentTableProducer<T>::produce(edm::Event &iEvent, const edm::Even
     svTable->addColumn<float>("ptrel", sv_ptrel, "pT relative to parent jet", nanoaod::FlatTable::FloatColumn, 10);
     svTable->addColumn<float>("deltaR", sv_deltaR, "dR from parent jet", nanoaod::FlatTable::FloatColumn, 10);
     svTable->addColumn<float>("enration", sv_enratio, "energy relative to parent jet", nanoaod::FlatTable::FloatColumn, 10);
+    // Tracks from SV
+    for (int itrk = 0; itrk < 5; ++itrk) {
+      svTable->addColumn<float>("trk" + std::to_string(itrk) + "_pt", sv_trk_pt[itrk], "SV " + std::to_string(itrk) + "-th track pt", nanoaod::FlatTable::FloatColumn, 10);
+      svTable->addColumn<float>("trk" + std::to_string(itrk) + "_eta", sv_trk_eta[itrk], "SV " + std::to_string(itrk) + "-th track eta", nanoaod::FlatTable::FloatColumn, 10);
+      svTable->addColumn<float>("trk" + std::to_string(itrk) + "_phi", sv_trk_phi[itrk], "SV " + std::to_string(itrk) + "-th track phi", nanoaod::FlatTable::FloatColumn, 10);
+      svTable->addColumn<float>("trk" + std::to_string(itrk) + "_mass", sv_trk_mass[itrk], "SV " + std::to_string(itrk) + "-th track mass", nanoaod::FlatTable::FloatColumn, 10);
+      svTable->addColumn<float>("trk" + std::to_string(itrk) + "_energy", sv_trk_energy[itrk], "SV " + std::to_string(itrk) + "-th track energy", nanoaod::FlatTable::FloatColumn, 10);
+      svTable->addColumn<float>("trk" + std::to_string(itrk) + "_pdgId", sv_trk_pdgId[itrk], "SV " + std::to_string(itrk) + "-th track pdgId", nanoaod::FlatTable::FloatColumn, 10);
+      svTable->addColumn<int>("trk" + std::to_string(itrk) + "_origIdx", sv_trk_origIdx[itrk], "SV " + std::to_string(itrk) + "-th track original index", nanoaod::FlatTable::IntColumn, 10);
+    }
   }
   iEvent.put(std::move(svTable), nameSV_);
 
